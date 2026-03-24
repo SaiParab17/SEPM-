@@ -7,17 +7,41 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { getSearchResult, type ChatEntry } from "@/lib/mock-data";
+import { searchDocuments, checkHealth } from "@/lib/api";
+import { toast } from "@/hooks/use-toast";
+
+interface SearchResult {
+  answer: string;
+  sources: { page: number; filename: string; score?: number }[];
+  confidence: 'high' | 'partial' | 'low';
+  responseTime: number;
+}
+
+interface ChatEntry {
+  id: string;
+  query: string;
+  result: SearchResult;
+  timestamp: Date;
+}
 
 const Index = () => {
   const [query, setQuery] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [chatHistory, setChatHistory] = useState<ChatEntry[]>([]);
-  const [hasDocuments] = useState(true); // simulated
+  const [hasDocuments, setHasDocuments] = useState(true);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     inputRef.current?.focus();
+    
+    // Check if documents are available
+    checkHealth()
+      .then((health) => {
+        setHasDocuments(health.documentChunks > 0);
+      })
+      .catch(() => {
+        setHasDocuments(false);
+      });
   }, []);
 
   const handleSearch = useCallback(async () => {
@@ -25,22 +49,34 @@ const Index = () => {
     if (!trimmed) return;
 
     setIsSearching(true);
-    const result = getSearchResult(trimmed);
 
-    // Simulate network delay
-    await new Promise((r) => setTimeout(r, 1200 + Math.random() * 1000));
-
-    setChatHistory((prev) => [
-      {
-        id: crypto.randomUUID(),
-        query: trimmed,
-        result: { ...result, responseTime: +(1 + Math.random() * 2).toFixed(1) },
-        timestamp: new Date(),
-      },
-      ...prev,
-    ]);
-    setQuery("");
-    setIsSearching(false);
+    try {
+      const response = await searchDocuments(trimmed);
+      
+      if (response.success && response.result) {
+        setChatHistory((prev) => [
+          {
+            id: crypto.randomUUID(),
+            query: trimmed,
+            result: response.result!,
+            timestamp: new Date(),
+          },
+          ...prev,
+        ]);
+        setQuery("");
+      } else {
+        throw new Error(response.error || "Search failed");
+      }
+    } catch (error) {
+      console.error("Search error:", error);
+      toast({
+        title: "Search failed",
+        description: error instanceof Error ? error.message : "Unable to search documents",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSearching(false);
+    }
   }, [query]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

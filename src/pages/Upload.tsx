@@ -1,11 +1,12 @@
-import { useState, useCallback, useRef } from "react";
-import { CloudUpload, FileText, CheckCircle, Loader2, X, AlertCircle } from "lucide-react";
+import { useState, useCallback, useRef, useEffect } from "react";
+import { CloudUpload, FileText, CheckCircle, Loader2, X, AlertCircle, Trash2, Database } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "@/hooks/use-toast";
+import { uploadDocument, getStoredDocuments, clearAllDocuments, type StoredDocument } from "@/lib/api";
 
 interface UploadedFile {
   id: string;
@@ -27,7 +28,57 @@ const Upload = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [processedCount, setProcessedCount] = useState<number | null>(null);
+  const [storedDocuments, setStoredDocuments] = useState<StoredDocument[]>([]);
+  const [isLoadingStored, setIsLoadingStored] = useState(true);
+  const [isClearing, setIsClearing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Load stored documents on mount
+  useEffect(() => {
+    loadStoredDocuments();
+  }, []);
+
+  const loadStoredDocuments = async () => {
+    try {
+      setIsLoadingStored(true);
+      const response = await getStoredDocuments();
+      setStoredDocuments(response.documents);
+    } catch (error) {
+      console.error("Error loading stored documents:", error);
+      toast({
+        title: "Failed to load documents",
+        description: "Could not retrieve stored documents from database.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingStored(false);
+    }
+  };
+
+  const handleClearAll = async () => {
+    if (!confirm("Are you sure you want to clear all stored documents? This cannot be undone.")) {
+      return;
+    }
+
+    try {
+      setIsClearing(true);
+      const response = await clearAllDocuments();
+      setStoredDocuments([]);
+      toast({
+        title: "Documents cleared",
+        description: response.message,
+      });
+    } catch (error) {
+      console.error("Error clearing documents:", error);
+      toast({
+        title: "Failed to clear documents",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setIsClearing(false);
+    }
+  };
 
   const addFiles = useCallback((fileList: FileList | File[]) => {
     const newFiles: UploadedFile[] = [];
@@ -64,27 +115,61 @@ const Upload = () => {
     setProgress(0);
     setProcessedCount(null);
 
-    const total = files.length;
+    const pendingFilesToProcess = files.filter((f) => f.status === "pending");
+    const total = pendingFilesToProcess.length;
+    let successCount = 0;
+
     for (let i = 0; i < total; i++) {
+      const fileToProcess = pendingFilesToProcess[i];
+      
       setFiles((prev) =>
-        prev.map((f, idx) => (idx === i ? { ...f, status: "processing" } : f))
+        prev.map((f) => (f.id === fileToProcess.id ? { ...f, status: "processing" } : f))
       );
 
-      // Simulate processing per file
-      const steps = 10;
-      for (let s = 0; s <= steps; s++) {
-        await new Promise((r) => setTimeout(r, 80));
-        setProgress(Math.round(((i * steps + s) / (total * steps)) * 100));
+      try {
+        // Upload and process the document
+        const response = await uploadDocument(fileToProcess.file);
+        
+        if (response.success) {
+          setFiles((prev) =>
+            prev.map((f) => (f.id === fileToProcess.id ? { ...f, status: "complete" } : f))
+          );
+          successCount++;
+          toast({
+            title: "Document processed",
+            description: `${fileToProcess.file.name} has been indexed successfully.`,
+          });
+        } else {
+          throw new Error(response.error || "Upload failed");
+        }
+      } catch (error) {
+        console.error("Processing error:", error);
+        setFiles((prev) =>
+          prev.map((f) => (f.id === fileToProcess.id ? { ...f, status: "error" } : f))
+        );
+        toast({
+          title: "Processing failed",
+          description: `Failed to process ${fileToProcess.file.name}: ${error instanceof Error ? error.message : "Unknown error"}`,
+          variant: "destructive",
+        });
       }
-
-      setFiles((prev) =>
-        prev.map((f, idx) => (idx === i ? { ...f, status: "complete" } : f))
-      );
+      
+      setProgress(Math.round(((i + 1) / total) * 100));
     }
 
     setProgress(100);
-    setProcessedCount(total);
+    setProcessedCount(successCount);
     setIsProcessing(false);
+
+    // Reload stored documents after processing
+    await loadStoredDocuments();
+
+    if (successCount === total) {
+      toast({
+        title: "All documents processed",
+        description: `Successfully processed ${successCount} document${successCount > 1 ? 's' : ''}.`,
+      });
+    }
   };
 
   const pendingFiles = files.filter((f) => f.status === "pending");
@@ -92,6 +177,76 @@ const Upload = () => {
   return (
     <div className="p-6 max-w-4xl mx-auto">
       <h1 className="text-xl font-semibold text-foreground mb-6">Upload Documents</h1>
+
+      {/* Stored Documents Section */}
+      <Card className="mb-6 shadow-sm">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Database className="h-4 w-4" />
+              Stored Documents ({storedDocuments.length})
+            </CardTitle>
+            {storedDocuments.length > 0 && (
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={handleClearAll}
+                disabled={isClearing}
+              >
+                {isClearing ? (
+                  <>
+                    <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                    Clearing...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="mr-2 h-3 w-3" />
+                    Clear All
+                  </>
+                )}
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          {isLoadingStored ? (
+            <div className="flex items-center justify-center py-8 text-muted-foreground">
+              <Loader2 className="h-5 w-5 animate-spin mr-2" />
+              Loading stored documents...
+            </div>
+          ) : storedDocuments.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <Database className="h-12 w-12 mx-auto mb-3 opacity-20" />
+              <p className="text-sm">No documents stored yet</p>
+              <p className="text-xs mt-1">Upload and process PDFs to add them to the database</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Filename</TableHead>
+                  <TableHead className="w-32 text-right">Chunks</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {storedDocuments.map((doc) => (
+                  <TableRow key={doc.documentId}>
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-primary/60 shrink-0" />
+                        <span className="truncate">{doc.filename}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right text-muted-foreground text-sm">
+                      {doc.chunkCount}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Drop zone */}
       <Card
@@ -161,6 +316,11 @@ const Upload = () => {
                       {f.status === "complete" && (
                         <Badge className="bg-success text-success-foreground gap-1 text-xs">
                           <CheckCircle className="h-3 w-3" /> Complete
+                        </Badge>
+                      )}
+                      {f.status === "error" && (
+                        <Badge variant="destructive" className="gap-1 text-xs">
+                          <AlertCircle className="h-3 w-3" /> Error
                         </Badge>
                       )}
                     </TableCell>
