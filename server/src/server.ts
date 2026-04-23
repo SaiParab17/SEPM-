@@ -46,9 +46,50 @@ app.use((req, res) => {
   });
 });
 
+function classifyServiceError(err: unknown): { status: number; message: string } | null {
+  const message = err instanceof Error ? err.message : String(err);
+  const lower = message.toLowerCase();
+
+  if (
+    lower.includes('invalid api key') ||
+    lower.includes('incorrect api key') ||
+    lower.includes('api key is invalid') ||
+    lower.includes('unauthorized') ||
+    lower.includes('401')
+  ) {
+    return {
+      status: 401,
+      message: 'Your OpenRouter API key is invalid or expired. Please update server/.env with a valid OPENROUTER_API_KEY.',
+    };
+  }
+
+  if (
+    lower.includes('insufficient_quota') ||
+    lower.includes('insufficient credits') ||
+    lower.includes('quota exceeded') ||
+    lower.includes('payment required') ||
+    lower.includes('402')
+  ) {
+    return {
+      status: 402,
+      message: 'Your OpenRouter credits appear to be exhausted. Please top up your account or switch to a free model.',
+    };
+  }
+
+  return null;
+}
+
 // Error handler
 const errorHandler: ErrorRequestHandler = (err, req, res, next) => {
   console.error('Error:', err);
+
+  const classified = classifyServiceError(err);
+  if (classified) {
+    return res.status(classified.status).json({
+      success: false,
+      error: classified.message,
+    });
+  }
   
   res.status(err.status || 500).json({
     success: false,

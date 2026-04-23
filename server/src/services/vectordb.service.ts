@@ -19,6 +19,7 @@ export class VectorDBService {
   private embeddings: OpenAIEmbeddings;
   private storagePath: string;
   private documents: StoredDocument[] = [];
+  private initializePromise: Promise<void>;
 
   constructor() {
     this.embeddings = new OpenAIEmbeddings({
@@ -35,7 +36,11 @@ export class VectorDBService {
     });
     
     this.storagePath = path.join(env.chromaPath, 'vectors.json');
-    this.loadDocuments();
+    this.initializePromise = this.loadDocuments();
+  }
+
+  private async ensureInitialized(): Promise<void> {
+    await this.initializePromise;
   }
 
   /**
@@ -89,6 +94,8 @@ export class VectorDBService {
    */
   async addDocuments(chunks: DocumentChunk[]): Promise<void> {
     try {
+      await this.ensureInitialized();
+
       // Generate embeddings for all chunks
       const texts = chunks.map(chunk => chunk.pageContent);
       const embeddings = await this.embeddings.embedDocuments(texts);
@@ -114,7 +121,8 @@ export class VectorDBService {
       console.log(`✅ Added ${chunks.length} chunks to vector database`);
     } catch (error) {
       console.error('Error adding documents to vector DB:', error);
-      throw new Error('Failed to add documents to vector database');
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to add documents to vector database: ${reason}`);
     }
   }
 
@@ -126,6 +134,8 @@ export class VectorDBService {
     maxResults: number = 5
   ): Promise<DocumentSource[]> {
     try {
+      await this.ensureInitialized();
+
       if (this.documents.length === 0) {
         return [];
       }
@@ -154,7 +164,8 @@ export class VectorDBService {
       return sources;
     } catch (error) {
       console.error('Error searching vector DB:', error);
-      throw new Error('Failed to search documents');
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to search documents: ${reason}`);
     }
   }
 
@@ -163,6 +174,8 @@ export class VectorDBService {
    */
   async deleteDocument(documentId: string): Promise<void> {
     try {
+      await this.ensureInitialized();
+
       const initialCount = this.documents.length;
       this.documents = this.documents.filter(
         doc => doc.metadata.documentId !== documentId
@@ -183,6 +196,7 @@ export class VectorDBService {
    * Get count of documents in collection
    */
   async getDocumentCount(): Promise<number> {
+    await this.ensureInitialized();
     return this.documents.length;
   }
 
@@ -190,6 +204,7 @@ export class VectorDBService {
    * Get all unique documents
    */
   async getAllDocuments(): Promise<Array<{ documentId: string; filename: string; chunkCount: number }>> {
+    await this.ensureInitialized();
     const docMap = new Map<string, { filename: string; count: number }>();
     
     for (const doc of this.documents) {
@@ -215,6 +230,7 @@ export class VectorDBService {
    * Clear all documents from vector database
    */
   async clearAllDocuments(): Promise<number> {
+    await this.ensureInitialized();
     const count = this.documents.length;
     this.documents = [];
     await this.saveDocuments();

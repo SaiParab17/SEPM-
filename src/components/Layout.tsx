@@ -1,19 +1,10 @@
-import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
-import { AppSidebar } from "@/components/AppSidebar";
+import { Navbar } from "@/components/Navbar";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
-    <SidebarProvider>
-      <div className="min-h-screen flex w-full">
-        <AppSidebar />
-        <div className="flex-1 flex flex-col">
-          <header className="h-12 flex items-center border-b px-4">
-            <SidebarTrigger className="mr-3" />
-            <span className="text-sm font-medium text-muted-foreground">DocuMind</span>
-          </header>
-          <main className="flex-1">{children}</main>
-        </div>
-      </div>
-    </SidebarProvider>
+    <div className="min-h-screen flex flex-col mesh-bg">
+      <Navbar />
+      <main className="relative z-10 flex-1">{children}</main>
+    </div>
   );
 }

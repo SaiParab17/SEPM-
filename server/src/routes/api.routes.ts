@@ -91,6 +91,19 @@ router.post(
       res.json(response);
     } catch (error) {
       console.error('Upload error:', error);
+
+      const message = error instanceof Error ? error.message : String(error);
+
+      if (message.toLowerCase().includes('no extractable text') || message.toLowerCase().includes('no searchable content')) {
+        if (filePath) {
+          await pdfService.deleteFile(filePath).catch(console.error);
+        }
+
+        return res.status(422).json({
+          success: false,
+          error: message,
+        } as UploadResponse);
+      }
       
       // Clean up file if processing failed
       if (filePath) {
@@ -108,7 +121,8 @@ router.post(
  */
 router.post('/search', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { query, maxResults = 5 } = req.body as SearchRequest;
+    const { query, maxResults = 3 } = req.body as SearchRequest;
+    const boundedMaxResults = Math.min(Math.max(Number(maxResults) || 3, 1), 5);
 
     if (!query || typeof query !== 'string' || query.trim().length === 0) {
       return res.status(400).json({
@@ -120,13 +134,13 @@ router.post('/search', async (req: Request, res: Response, next: NextFunction) =
     console.log(`🔍 Search query: "${query}"`);
 
     // Search for relevant documents
-    const sources = await vectorDBService.searchSimilar(query, maxResults);
+    const sources = await vectorDBService.searchSimilar(query, boundedMaxResults);
 
     if (sources.length === 0) {
       return res.json({
         success: true,
         result: {
-          answer: 'No relevant documents found for your query. Please upload documents first.',
+          answer: "I couldn't find a relevant section for that question in the indexed documents. Try rephrasing your question or asking about a specific topic from the PDF.",
           sources: [],
           confidence: 'low',
           responseTime: 0,

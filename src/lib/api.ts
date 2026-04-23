@@ -66,7 +66,7 @@ export async function uploadDocument(file: File): Promise<UploadResponse> {
 /**
  * Search documents using natural language query
  */
-export async function searchDocuments(query: string, maxResults: number = 5): Promise<SearchResponse> {
+export async function searchDocuments(query: string, maxResults: number = 3): Promise<SearchResponse> {
   const response = await fetch(`${API_BASE_URL}/search`, {
     method: 'POST',
     headers: {

@@ -1,14 +1,12 @@
-import { useState, useCallback, useRef, useEffect } from "react";
-import { CloudUpload, FileText, CheckCircle, Loader2, X, AlertCircle, Trash2, Database } from "lucide-react";
+import { useState, useCallback, useEffect } from "react";
+import { FileText, CheckCircle, Loader2, Trash2, Database } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
-import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { FileUploadCard, type UploadedFile as UploadCardFile } from "@/components/ui/file-upload-card";
 import { toast } from "@/hooks/use-toast";
 import { uploadDocument, getStoredDocuments, clearAllDocuments, type StoredDocument } from "@/lib/api";
+import { motion } from "framer-motion";
 
-interface UploadedFile {
+interface UploadQueueFile {
   id: string;
   file: File;
   status: "pending" | "processing" | "complete" | "error";
@@ -16,22 +14,14 @@ interface UploadedFile {
 
 const MAX_SIZE = 10 * 1024 * 1024; // 10MB
 
-function formatSize(bytes: number) {
-  if (bytes < 1024) return bytes + " B";
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
-  return (bytes / (1024 * 1024)).toFixed(1) + " MB";
-}
-
 const Upload = () => {
-  const [files, setFiles] = useState<UploadedFile[]>([]);
-  const [isDragging, setIsDragging] = useState(false);
+  const [files, setFiles] = useState<UploadQueueFile[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [processedCount, setProcessedCount] = useState<number | null>(null);
   const [storedDocuments, setStoredDocuments] = useState<StoredDocument[]>([]);
   const [isLoadingStored, setIsLoadingStored] = useState(true);
   const [isClearing, setIsClearing] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Load stored documents on mount
   useEffect(() => {
@@ -81,7 +71,7 @@ const Upload = () => {
   };
 
   const addFiles = useCallback((fileList: FileList | File[]) => {
-    const newFiles: UploadedFile[] = [];
+    const newFiles: UploadQueueFile[] = [];
     Array.from(fileList).forEach((file) => {
       if (file.type !== "application/pdf") {
         toast({ title: "Invalid file type", description: `${file.name} is not a PDF.`, variant: "destructive" });
@@ -97,18 +87,16 @@ const Upload = () => {
     setProcessedCount(null);
   }, []);
 
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      setIsDragging(false);
-      addFiles(e.dataTransfer.files);
-    },
-    [addFiles]
-  );
-
   const removeFile = (id: string) => {
     setFiles((prev) => prev.filter((f) => f.id !== id));
   };
+
+  const cardFiles: UploadCardFile[] = files.map((file) => ({
+    id: file.id,
+    file: file.file,
+    progress: file.status === "complete" ? 100 : file.status === "processing" ? Math.max(progress, 5) : 0,
+    status: file.status === "complete" ? "completed" : file.status === "error" ? "error" : "uploading",
+  }));
 
   const processDocuments = async () => {
     setIsProcessing(true);
@@ -175,40 +163,44 @@ const Upload = () => {
   const pendingFiles = files.filter((f) => f.status === "pending");
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
-      <h1 className="text-xl font-semibold text-foreground mb-6">Upload Documents</h1>
+    <div className="p-4 sm:p-6 max-w-4xl mx-auto">
+      <h1 className="text-xl font-semibold gradient-text mb-6">Upload Documents</h1>
 
       {/* Stored Documents Section */}
-      <Card className="mb-6 shadow-sm">
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Database className="h-4 w-4" />
-              Stored Documents ({storedDocuments.length})
-            </CardTitle>
-            {storedDocuments.length > 0 && (
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={handleClearAll}
-                disabled={isClearing}
-              >
-                {isClearing ? (
-                  <>
-                    <Loader2 className="mr-2 h-3 w-3 animate-spin" />
-                    Clearing...
-                  </>
-                ) : (
-                  <>
-                    <Trash2 className="mr-2 h-3 w-3" />
-                    Clear All
-                  </>
-                )}
-              </Button>
-            )}
+      <motion.div
+        className="mb-6 glass-card rounded-2xl overflow-hidden"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
+      >
+        <div className="flex items-center justify-between p-5 border-b border-white/[0.06]">
+          <div className="flex items-center gap-2 text-base font-semibold text-foreground">
+            <Database className="h-4 w-4 text-cyan-400" />
+            Stored Documents ({storedDocuments.length})
           </div>
-        </CardHeader>
-        <CardContent>
+          {storedDocuments.length > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleClearAll}
+              disabled={isClearing}
+              className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
+            >
+              {isClearing ? (
+                <>
+                  <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                  Clearing...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="mr-2 h-3 w-3" />
+                  Clear All
+                </>
+              )}
+            </Button>
+          )}
+        </div>
+        <div className="p-5">
           {isLoadingStored ? (
             <div className="flex items-center justify-center py-8 text-muted-foreground">
               <Loader2 className="h-5 w-5 animate-spin mr-2" />
@@ -216,128 +208,45 @@ const Upload = () => {
             </div>
           ) : storedDocuments.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              <Database className="h-12 w-12 mx-auto mb-3 opacity-20" />
+              <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-2xl glass-panel">
+                <Database className="h-8 w-8 text-muted-foreground/30" />
+              </div>
               <p className="text-sm">No documents stored yet</p>
-              <p className="text-xs mt-1">Upload and process PDFs to add them to the database</p>
+              <p className="text-xs mt-1 text-muted-foreground">Upload and process PDFs to add them to the database</p>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Filename</TableHead>
-                  <TableHead className="w-32 text-right">Chunks</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {storedDocuments.map((doc) => (
-                  <TableRow key={doc.documentId}>
-                    <TableCell className="font-medium">
-                      <div className="flex items-center gap-2">
-                        <FileText className="h-4 w-4 text-primary/60 shrink-0" />
-                        <span className="truncate">{doc.filename}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right text-muted-foreground text-sm">
-                      {doc.chunkCount}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <div className="grid gap-3">
+              {storedDocuments.map((doc, i) => (
+                <motion.div
+                  key={doc.documentId}
+                  className="flex items-center justify-between glass-panel hover-lift rounded-xl p-3"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.05 }}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-cyan-500/10">
+                      <FileText className="h-5 w-5 text-cyan-400" />
+                    </div>
+                    <span className="truncate text-sm font-medium text-foreground">{doc.filename}</span>
+                  </div>
+                  <span className="badge-complete rounded-full px-3 py-1 text-xs font-medium">
+                    {doc.chunkCount} chunks
+                  </span>
+                </motion.div>
+              ))}
+            </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </motion.div>
 
-      {/* Drop zone */}
-      <Card
-        className={`border-2 border-dashed transition-colors cursor-pointer ${
-          isDragging ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
-        }`}
-        onClick={() => fileInputRef.current?.click()}
-        onDragOver={(e) => {
-          e.preventDefault();
-          setIsDragging(true);
-        }}
-        onDragLeave={() => setIsDragging(false)}
-        onDrop={handleDrop}
-      >
-        <CardContent className="flex flex-col items-center justify-center py-12">
-          <CloudUpload className="h-12 w-12 text-primary/60 mb-4" />
-          <p className="text-foreground font-medium">Drop PDF files here or click to browse</p>
-          <p className="text-sm text-muted-foreground mt-1">PDF only, max 10MB per file</p>
-        </CardContent>
-      </Card>
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".pdf"
-        multiple
-        className="hidden"
-        onChange={(e) => e.target.files && addFiles(e.target.files)}
-      />
-
-      {/* File list */}
-      {files.length > 0 && (
-        <Card className="mt-6 shadow-sm">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Files ({files.length})</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Filename</TableHead>
-                  <TableHead className="w-24">Size</TableHead>
-                  <TableHead className="w-32">Status</TableHead>
-                  <TableHead className="w-12" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {files.map((f) => (
-                  <TableRow key={f.id}>
-                    <TableCell className="font-medium">
-                      <div className="flex items-center gap-2">
-                        <FileText className="h-4 w-4 text-primary/60 shrink-0" />
-                        <span className="truncate">{f.file.name}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground text-sm">{formatSize(f.file.size)}</TableCell>
-                    <TableCell>
-                      {f.status === "pending" && (
-                        <Badge variant="secondary" className="gap-1 text-xs">
-                          <AlertCircle className="h-3 w-3" /> Pending
-                        </Badge>
-                      )}
-                      {f.status === "processing" && (
-                        <Badge className="bg-primary text-primary-foreground gap-1 text-xs">
-                          <Loader2 className="h-3 w-3 animate-spin" /> Processing
-                        </Badge>
-                      )}
-                      {f.status === "complete" && (
-                        <Badge className="bg-success text-success-foreground gap-1 text-xs">
-                          <CheckCircle className="h-3 w-3" /> Complete
-                        </Badge>
-                      )}
-                      {f.status === "error" && (
-                        <Badge variant="destructive" className="gap-1 text-xs">
-                          <AlertCircle className="h-3 w-3" /> Error
-                        </Badge>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {f.status === "pending" && (
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => removeFile(f.id)}>
-                          <X className="h-3 w-3" />
-                        </Button>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      )}
+      <div className="mt-2">
+        <FileUploadCard
+          files={cardFiles}
+          onFilesChange={addFiles}
+          onFileRemove={removeFile}
+        />
+      </div>
 
       {/* Process button & progress */}
       <div className="mt-6 space-y-4">
@@ -345,32 +254,37 @@ const Upload = () => {
           <div className="space-y-2">
             <div className="flex items-center justify-between text-sm">
               <span className="text-muted-foreground">Vectorizing...</span>
-              <span className="font-medium text-primary">{progress}%</span>
+              <span className="font-medium text-cyan-400">{progress}%</span>
             </div>
-            <Progress value={progress} className="h-2" />
+            <div className="h-2 w-full rounded-full bg-white/[0.06] overflow-hidden">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-violet-500 transition-all duration-300"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
           </div>
         )}
 
         {processedCount !== null && !isProcessing && (
-          <div className="flex items-center gap-2 text-success">
+          <div className="flex items-center gap-2 text-emerald-400">
             <CheckCircle className="h-5 w-5" />
             <span className="font-medium">{processedCount} documents indexed</span>
           </div>
         )}
 
-        <Button
+        <button
           onClick={processDocuments}
           disabled={pendingFiles.length === 0 || isProcessing}
-          className="w-full sm:w-auto"
+          className="inline-flex items-center gap-2 btn-gradient rounded-xl px-6 py-3 text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
         >
           {isProcessing ? (
             <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Processing...
+              <Loader2 className="h-4 w-4 animate-spin" /> Processing...
             </>
           ) : (
             "Process Documents"
           )}
-        </Button>
+        </button>
 
         <p className="text-xs text-muted-foreground">Processing time: ~30s per document</p>
       </div>
