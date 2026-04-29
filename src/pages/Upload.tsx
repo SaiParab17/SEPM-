@@ -12,7 +12,22 @@ interface UploadQueueFile {
   status: "pending" | "processing" | "complete" | "error";
 }
 
-const MAX_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_SIZE = 50 * 1024 * 1024; // 50MB
+
+// Must stay in sync with server/src/services/document.service.ts
+const SUPPORTED_EXTENSIONS = new Set([
+  // Documents
+  ".pdf", ".docx", ".doc", ".pptx", ".ppt",
+  // Spreadsheets
+  ".xlsx", ".xls", ".csv",
+  // Text / code
+  ".txt", ".md", ".markdown", ".json", ".html", ".htm",
+  ".xml", ".yaml", ".yml", ".js", ".ts", ".py",
+  // Images (OCR)
+  ".png", ".jpg", ".jpeg", ".webp", ".tiff", ".bmp",
+]);
+
+const getExt = (name: string) => "." + name.split(".").pop()!.toLowerCase();
 
 const Upload = () => {
   const [files, setFiles] = useState<UploadQueueFile[]>([]);
@@ -73,12 +88,17 @@ const Upload = () => {
   const addFiles = useCallback((fileList: FileList | File[]) => {
     const newFiles: UploadQueueFile[] = [];
     Array.from(fileList).forEach((file) => {
-      if (file.type !== "application/pdf") {
-        toast({ title: "Invalid file type", description: `${file.name} is not a PDF.`, variant: "destructive" });
+      const ext = getExt(file.name);
+      if (!SUPPORTED_EXTENSIONS.has(ext)) {
+        toast({
+          title: "Unsupported file type",
+          description: `${file.name} — supported: PDF, DOCX, XLSX, CSV, PPTX, TXT, MD, PNG, JPG`,
+          variant: "destructive",
+        });
         return;
       }
       if (file.size > MAX_SIZE) {
-        toast({ title: "File too large", description: `${file.name} exceeds 10MB limit.`, variant: "destructive" });
+        toast({ title: "File too large", description: `${file.name} exceeds 50 MB limit.`, variant: "destructive" });
         return;
       }
       newFiles.push({ id: crypto.randomUUID(), file, status: "pending" });
@@ -286,7 +306,7 @@ const Upload = () => {
           )}
         </button>
 
-        <p className="text-xs text-muted-foreground">Processing time: ~30s per document</p>
+        <p className="text-xs text-muted-foreground">Processing time varies by file type (~5-30s per document)</p>
       </div>
     </div>
   );

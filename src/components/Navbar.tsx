@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { Search, Upload, History, LogOut, Brain, Menu, X } from "lucide-react";
+import { Search, Upload, History, LogOut, Brain, Menu, X, Video } from "lucide-react";
 import { logout } from "@/lib/auth";
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
@@ -10,6 +10,7 @@ const navItems = [
   { title: "Search", url: "/", icon: Search },
   { title: "Upload", url: "/upload", icon: Upload },
   { title: "History", url: "/history", icon: History },
+  { title: "Video QA", url: "/video-qa", icon: Video },
 ];
 
 export function Navbar() {

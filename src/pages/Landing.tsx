@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Search, Upload, Brain, FileText, Zap, Shield, ArrowRight, Sparkles } from "lucide-react";
+import { Search, Upload, Brain, FileText, Zap, Shield, ArrowRight, Sparkles, Video } from "lucide-react";
 import { motion } from "framer-motion";
 
 const features = [
@@ -20,6 +20,12 @@ const features = [
     title: "Source Attribution",
     description: "Every answer comes with exact source citations — document name and page number for full traceability.",
     gradient: "from-cyan-500 to-violet-500",
+  },
+  {
+    icon: Video,
+    title: "Video Q&A",
+    description: "Upload any video and ask questions about it. Powered by LLaVA-NeXT multimodal vision-language model.",
+    gradient: "from-rose-500 to-orange-500",
   },
 ];
 
@@ -80,6 +86,13 @@ export default function Landing() {
               >
                 <Upload className="h-4 w-4" />
                 Upload PDFs
+              </Link>
+              <Link
+                to="/video-qa"
+                className="inline-flex items-center justify-center gap-2 rounded-xl px-8 py-3.5 text-sm font-semibold text-foreground/80 hover:text-foreground transition-colors border border-white/[0.08] hover:border-rose-500/40 hover:bg-rose-500/5 rounded-xl"
+              >
+                <Video className="h-4 w-4 text-rose-400" />
+                Video Q&A
               </Link>
             </div>
 
@@ -162,7 +175,7 @@ export default function Landing() {
           </p>
         </motion.div>
 
-        <div className="grid gap-6 md:grid-cols-3">
+        <div className="grid gap-6 md:grid-cols-2">
           {features.map((feature, index) => (
             <motion.div
               key={feature.title}

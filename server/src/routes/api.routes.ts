@@ -3,7 +3,7 @@ import multer from 'multer';
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
 import fs from 'fs/promises';
-import { pdfService } from '../services/pdf.service.js';
+import { documentService, SUPPORTED_MIME_TYPES, SUPPORTED_EXTENSIONS } from '../services/document.service.js';
 import { vectorDBService } from '../services/vectordb.service.js';
 import { llmService } from '../services/llm.service.js';
 import { env } from '../config/env.js';
@@ -31,10 +31,18 @@ const upload = multer({
   storage,
   limits: { fileSize: env.maxFileSize },
   fileFilter: (req, file, cb) => {
-    if (file.mimetype === 'application/pdf') {
+    const ext = path.extname(file.originalname).toLowerCase();
+    const supported =
+      SUPPORTED_MIME_TYPES[file.mimetype] !== undefined ||
+      SUPPORTED_EXTENSIONS[ext] !== undefined;
+
+    if (supported) {
       cb(null, true);
     } else {
-      cb(new Error('Only PDF files are allowed'));
+      cb(new Error(
+        `Unsupported file type "${ext}". ` +
+        'Supported: PDF, DOCX, XLSX, CSV, PPTX, TXT, MD, JSON, HTML, PNG, JPG, WEBP'
+      ));
     }
   },
 });
@@ -61,16 +69,17 @@ router.post(
       filePath = file.path;
       const documentId = uuidv4();
 
-      console.log(`📄 Processing file: ${file.originalname}`);
+      console.log(`📄 Processing file: ${file.originalname} (${file.mimetype})`);
 
-      // Extract text and split into chunks
-      const { chunks, pageCount } = await pdfService.processPDF(
+      // Extract text, split into chunks — works for ALL supported file types
+      const { chunks, pageCount, fileType } = await documentService.processDocument(
         filePath,
         file.originalname,
-        documentId
+        documentId,
+        file.mimetype
       );
 
-      console.log(`📝 Extracted ${chunks.length} chunks from ${pageCount} pages`);
+      console.log(`📝 [${fileType.toUpperCase()}] ${chunks.length} chunks from ${pageCount} page(s)`);
 
       // Add to vector database
       await vectorDBService.addDocuments(chunks);
@@ -94,20 +103,24 @@ router.post(
 
       const message = error instanceof Error ? error.message : String(error);
 
-      if (message.toLowerCase().includes('no extractable text') || message.toLowerCase().includes('no searchable content')) {
-        if (filePath) {
-          await pdfService.deleteFile(filePath).catch(console.error);
-        }
+      // Clean up uploaded file if processing failed
+      if (filePath) {
+        await documentService.deleteFile(filePath).catch(console.error);
+      }
 
+      const clientFacing =
+        message.toLowerCase().includes('unsupported') ||
+        message.toLowerCase().includes('no text') ||
+        message.toLowerCase().includes('no data') ||
+        message.toLowerCase().includes('no readable') ||
+        message.toLowerCase().includes('no extractable') ||
+        message.toLowerCase().includes('no searchable');
+
+      if (clientFacing) {
         return res.status(422).json({
           success: false,
           error: message,
         } as UploadResponse);
-      }
-      
-      // Clean up file if processing failed
-      if (filePath) {
-        await pdfService.deleteFile(filePath).catch(console.error);
       }
 
       next(error);

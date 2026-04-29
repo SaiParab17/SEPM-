@@ -122,7 +122,14 @@ export const FileUploadCard = React.forwardRef<HTMLDivElement, FileUploadCardPro
                 : "border-white/10 hover:border-cyan-500/40 hover:bg-white/[0.02]"
             )}
           >
-            <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelect} />
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={handleFileSelect}
+              accept=".pdf,.docx,.doc,.pptx,.ppt,.xlsx,.xls,.csv,.txt,.md,.markdown,.json,.html,.htm,.xml,.yaml,.yml,.js,.ts,.py,.png,.jpg,.jpeg,.webp,.tiff,.bmp"
+            />
             <div className={cn(
               "mb-4 flex h-16 w-16 items-center justify-center rounded-2xl transition-all duration-300",
               isDragging ? "bg-cyan-500/20 animate-pulse" : "glass-panel"
@@ -130,7 +137,9 @@ export const FileUploadCard = React.forwardRef<HTMLDivElement, FileUploadCardPro
               <UploadCloud className={cn("h-8 w-8 transition-colors", isDragging ? "text-cyan-400" : "text-muted-foreground")} />
             </div>
             <p className="font-semibold text-foreground">Choose a file or drag and drop it here</p>
-            <p className="mt-1 text-xs text-muted-foreground">PDF format up to 10 MB per file</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              PDF, DOCX, XLSX, CSV, PPTX, TXT, MD, PNG, JPG &mdash; up to 50 MB
+            </p>
             <button className="pointer-events-none mt-4 rounded-xl btn-gradient-outline px-4 py-2 text-xs font-semibold">
               Browse File
             </button>

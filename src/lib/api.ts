@@ -138,3 +138,48 @@ export async function clearAllDocuments(): Promise<DeleteResponse> {
 
   return response.json();
 }
+
+/**
+ * Video QA — query a video via the Kaggle LLaVA endpoint
+ */
+export type VideoQAQuality = 'fast' | 'balanced' | 'thorough';
+
+export interface VideoQAResponse {
+  success: boolean;
+  answer?: string;
+  frames_extracted?: number;
+  response_time?: number;
+  model?: string;
+  quality?: string;
+  video_duration?: number;
+  video_resolution?: string;
+  error?: string;
+}
+
+export async function queryVideo(
+  ngrokUrl: string,
+  videoFile: File,
+  query: string,
+  quality: VideoQAQuality = 'balanced'
+): Promise<VideoQAResponse> {
+  const formData = new FormData();
+  formData.append('video', videoFile);
+  formData.append('query', query);
+  formData.append('quality', quality);
+
+  const response = await fetch(`${ngrokUrl}/api/video-qa`, {
+    method: 'POST',
+    body: formData,
+    headers: {
+      'ngrok-skip-browser-warning': 'true',
+    },
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Video query failed' }));
+    throw new Error(error.error || `Request failed (${response.status})`);
+  }
+
+  return response.json();
+}
+

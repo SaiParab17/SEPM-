@@ -9,6 +9,7 @@ import Upload from "./pages/Upload";
 import Landing from "./pages/Landing";
 import HistoryPage from "./pages/History";
 import NotFound from "./pages/NotFound";
+import VideoQA from "./pages/VideoQA";
 import LoginPage from "./pages/Login";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 
@@ -69,6 +70,7 @@ const App = () => (
                       <Route path="/" element={<Index />} />
                       <Route path="/upload" element={<Upload />} />
                       <Route path="/history" element={<HistoryPage />} />
+                      <Route path="/video-qa" element={<VideoQA />} />
                       <Route path="*" element={<NotFound />} />
                     </Routes>
                   </Layout>
