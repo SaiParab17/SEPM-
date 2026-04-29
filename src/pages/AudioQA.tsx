@@ -1,96 +1,55 @@
 import { useState, useCallback, useRef } from "react";
 import {
-  Video,
+  Mic,
   Send,
   Loader2,
   Clock,
   Cpu,
-  Film,
   Sparkles,
   Upload,
   X,
   AlertTriangle,
   Settings2,
-  Gauge,
-  Zap,
-  Target,
-  Microscope,
-  Volume2,
-  VolumeX,
   FileText,
+  Music,
+  Volume2,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-import { queryVideo, type VideoQAQuality } from "@/lib/api";
+import { queryAudio } from "@/lib/api";
 import { motion, AnimatePresence } from "framer-motion";
 
-interface VideoQAResult {
+interface AudioQAResult {
   answer: string;
-  video_answer?: string;
-  audio_transcript?: string;
-  frames_extracted: number;
+  transcript: string;
+  audio_duration: number;
   response_time: number;
   model: string;
-  quality: string;
-  include_audio: boolean;
-  audio_duration?: number;
-  video_duration?: number;
-  video_resolution?: string;
 }
 
 interface ChatEntry {
   id: string;
   query: string;
-  result: VideoQAResult;
+  result: AudioQAResult;
   timestamp: Date;
 }
 
-const ACCEPTED_TYPES = ["video/mp4", "video/webm", "video/quicktime", "video/x-msvideo"];
-const MAX_VIDEO_SIZE = 100 * 1024 * 1024; // 100MB
-
-const QUALITY_OPTIONS: {
-  value: VideoQAQuality;
-  label: string;
-  description: string;
-  icon: typeof Zap;
-  color: string;
-  frames: string;
-  eta: string;
-}[] = [
-  {
-    value: "fast",
-    label: "Fast",
-    description: "16 uniform frames, quick scan",
-    icon: Zap,
-    color: "text-emerald-400 border-emerald-500/30 bg-emerald-500/5",
-    frames: "16",
-    eta: "~10s",
-  },
-  {
-    value: "balanced",
-    label: "Balanced",
-    description: "32 keyframes with scene-change detection",
-    icon: Target,
-    color: "text-cyan-400 border-cyan-500/30 bg-cyan-500/5",
-    frames: "32",
-    eta: "~20s",
-  },
-  {
-    value: "thorough",
-    label: "Thorough",
-    description: "Multi-segment dense analysis, covers entire video",
-    icon: Microscope,
-    color: "text-violet-400 border-violet-500/30 bg-violet-500/5",
-    frames: "96-192",
-    eta: "~45-90s",
-  },
+const ACCEPTED_AUDIO = [
+  "audio/mpeg",
+  "audio/wav",
+  "audio/x-wav",
+  "audio/ogg",
+  "audio/flac",
+  "audio/mp4",
+  "audio/webm",
+  "audio/aac",
+  "audio/x-m4a",
 ];
+const MAX_AUDIO_SIZE = 50 * 1024 * 1024; // 50MB
 
-const VideoQA = () => {
-  const [videoFile, setVideoFile] = useState<File | null>(null);
-  const [videoPreview, setVideoPreview] = useState<string | null>(null);
+const AudioQA = () => {
+  const [audioFile, setAudioFile] = useState<File | null>(null);
+  const [audioPreview, setAudioPreview] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [quality, setQuality] = useState<VideoQAQuality>("balanced");
-  const [includeAudio, setIncludeAudio] = useState(false);
   const [isQuerying, setIsQuerying] = useState(false);
   const [chatHistory, setChatHistory] = useState<ChatEntry[]>([]);
   const [ngrokUrl, setNgrokUrl] = useState(() => {
@@ -99,32 +58,34 @@ const VideoQA = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [expandedTranscript, setExpandedTranscript] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
 
-  const handleVideoSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAudioSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!ACCEPTED_TYPES.includes(file.type)) {
+    const ext = "." + file.name.split(".").pop()?.toLowerCase();
+    const validExts = [".mp3", ".wav", ".ogg", ".flac", ".m4a", ".aac", ".webm", ".mp4"];
+
+    if (!ACCEPTED_AUDIO.includes(file.type) && !validExts.includes(ext)) {
       toast({
         title: "Invalid format",
-        description: "Please upload MP4, WebM, MOV, or AVI.",
+        description: "Please upload MP3, WAV, OGG, FLAC, M4A, or AAC.",
         variant: "destructive",
       });
       return;
     }
 
-    if (file.size > MAX_VIDEO_SIZE) {
+    if (file.size > MAX_AUDIO_SIZE) {
       toast({
         title: "File too large",
-        description: "Video must be under 100 MB.",
+        description: "Audio must be under 50 MB.",
         variant: "destructive",
       });
       return;
     }
 
-    setVideoFile(file);
-    setVideoPreview(URL.createObjectURL(file));
+    setAudioFile(file);
+    setAudioPreview(URL.createObjectURL(file));
     setChatHistory([]);
   }, []);
 
@@ -134,16 +95,16 @@ const VideoQA = () => {
       const file = e.dataTransfer.files?.[0];
       if (file) {
         const fakeEvent = { target: { files: [file] } } as unknown as React.ChangeEvent<HTMLInputElement>;
-        handleVideoSelect(fakeEvent);
+        handleAudioSelect(fakeEvent);
       }
     },
-    [handleVideoSelect]
+    [handleAudioSelect]
   );
 
-  const clearVideo = () => {
-    setVideoFile(null);
-    if (videoPreview) URL.revokeObjectURL(videoPreview);
-    setVideoPreview(null);
+  const clearAudio = () => {
+    setAudioFile(null);
+    if (audioPreview) URL.revokeObjectURL(audioPreview);
+    setAudioPreview(null);
     setChatHistory([]);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
@@ -156,7 +117,7 @@ const VideoQA = () => {
 
   const handleQuery = async () => {
     const trimmedQuery = query.trim();
-    if (!trimmedQuery || !videoFile) return;
+    if (!trimmedQuery || !audioFile) return;
 
     if (!ngrokUrl) {
       setShowSettings(true);
@@ -171,7 +132,7 @@ const VideoQA = () => {
     setIsQuerying(true);
 
     try {
-      const result = await queryVideo(ngrokUrl, videoFile, trimmedQuery, quality, includeAudio);
+      const result = await queryAudio(ngrokUrl, audioFile, trimmedQuery);
 
       if (result.success && result.answer) {
         const entry: ChatEntry = {
@@ -179,16 +140,10 @@ const VideoQA = () => {
           query: trimmedQuery,
           result: {
             answer: result.answer,
-            video_answer: result.video_answer,
-            audio_transcript: result.audio_transcript,
-            frames_extracted: result.frames_extracted || 32,
+            transcript: result.transcript || "",
+            audio_duration: result.audio_duration || 0,
             response_time: result.response_time || 0,
-            model: result.model || "LLaVA-NeXT-Video-7B",
-            quality: result.quality || quality,
-            include_audio: result.include_audio || false,
-            audio_duration: result.audio_duration,
-            video_duration: result.video_duration,
-            video_resolution: result.video_resolution,
+            model: result.model || "Whisper-large-v3 + LLaVA-7B",
           },
           timestamp: new Date(),
         };
@@ -198,13 +153,13 @@ const VideoQA = () => {
         throw new Error(result.error || "Query failed");
       }
     } catch (error) {
-      console.error("Video QA error:", error);
+      console.error("Audio QA error:", error);
       toast({
         title: "Query failed",
         description:
           error instanceof Error
             ? error.message
-            : "Unable to process video query. Make sure your Colab/Kaggle notebook is running.",
+            : "Unable to process audio. Make sure your Colab/Kaggle notebook is running.",
         variant: "destructive",
       });
     } finally {
@@ -219,20 +174,24 @@ const VideoQA = () => {
     }
   };
 
-  const currentQuality = QUALITY_OPTIONS.find((q) => q.value === quality)!;
+  const formatDuration = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return m > 0 ? `${m}m ${s}s` : `${s}s`;
+  };
 
   return (
     <div className="p-4 sm:p-6 max-w-5xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-rose-500 to-orange-500 shadow-lg">
-            <Video className="h-5 w-5 text-white" />
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 to-pink-500 shadow-lg">
+            <Mic className="h-5 w-5 text-white" />
           </div>
           <div>
-            <h1 className="text-xl font-semibold gradient-text">Video Q&A</h1>
+            <h1 className="text-xl font-semibold gradient-text">Audio Q&A</h1>
             <p className="text-xs text-muted-foreground">
-              Ask questions about any video using LLaVA-NeXT + Whisper
+              Transcribe and ask questions about any audio using Whisper
             </p>
           </div>
         </div>
@@ -263,7 +222,7 @@ const VideoQA = () => {
               Kaggle / Colab Ngrok URL
             </label>
             <p className="text-xs text-muted-foreground mb-3">
-              Paste the public URL from your notebook (e.g.{" "}
+              Same URL used for Video QA (e.g.{" "}
               <code className="text-cyan-400">https://xxxx-xx-xx.ngrok-free.dev</code>)
             </p>
             <div className="flex gap-3">
@@ -316,104 +275,41 @@ const VideoQA = () => {
         </motion.div>
       )}
 
-      {/* Quality Selector + Audio Toggle */}
+      {/* How it works */}
       <motion.div
-        className="mb-6"
+        className="mb-6 glass-card rounded-2xl p-5"
         initial={{ opacity: 0, y: 15 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, delay: 0.05 }}
       >
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <Gauge className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-medium text-foreground">Analysis Quality</span>
+        <div className="flex items-center gap-2 mb-3">
+          <Volume2 className="h-4 w-4 text-amber-400" />
+          <span className="text-sm font-medium text-foreground">How it works</span>
+        </div>
+        <div className="grid grid-cols-3 gap-3 text-center">
+          <div className="glass-panel rounded-xl p-3">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/10 mx-auto mb-2">
+              <Upload className="h-4 w-4 text-amber-400" />
+            </div>
+            <p className="text-[11px] text-muted-foreground">Upload audio file</p>
           </div>
-
-          {/* Audio Toggle */}
-          <button
-            onClick={() => setIncludeAudio(!includeAudio)}
-            disabled={isQuerying}
-            className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-all border ${
-              includeAudio
-                ? "border-amber-500/40 bg-amber-500/10 text-amber-400 shadow-lg shadow-amber-500/5"
-                : "border-white/[0.08] bg-white/[0.02] text-muted-foreground hover:border-white/[0.15] hover:text-foreground"
-            } disabled:opacity-50 disabled:cursor-not-allowed`}
-          >
-            {includeAudio ? (
-              <Volume2 className="h-4 w-4" />
-            ) : (
-              <VolumeX className="h-4 w-4" />
-            )}
-            <span>{includeAudio ? "Audio ON" : "Audio OFF"}</span>
-          </button>
+          <div className="glass-panel rounded-xl p-3">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-cyan-500/10 mx-auto mb-2">
+              <FileText className="h-4 w-4 text-cyan-400" />
+            </div>
+            <p className="text-[11px] text-muted-foreground">Whisper transcribes</p>
+          </div>
+          <div className="glass-panel rounded-xl p-3">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-500/10 mx-auto mb-2">
+              <Sparkles className="h-4 w-4 text-violet-400" />
+            </div>
+            <p className="text-[11px] text-muted-foreground">AI answers your question</p>
+          </div>
         </div>
-
-        <div className="grid grid-cols-3 gap-3">
-          {QUALITY_OPTIONS.map((opt) => {
-            const isActive = quality === opt.value;
-            const Icon = opt.icon;
-            return (
-              <button
-                key={opt.value}
-                onClick={() => setQuality(opt.value)}
-                disabled={isQuerying}
-                className={`relative rounded-xl p-4 text-left transition-all duration-300 border ${
-                  isActive
-                    ? `${opt.color} shadow-lg`
-                    : "border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04] hover:border-white/[0.12]"
-                } disabled:opacity-50 disabled:cursor-not-allowed`}
-              >
-                {isActive && (
-                  <motion.div
-                    className="absolute inset-0 rounded-xl"
-                    layoutId="quality-ring"
-                    transition={{ type: "spring", bounce: 0.2, duration: 0.5 }}
-                    style={{
-                      border: "1px solid currentColor",
-                      opacity: 0.3,
-                    }}
-                  />
-                )}
-                <div className="flex items-center gap-2 mb-1.5">
-                  <Icon className={`h-4 w-4 ${isActive ? "" : "text-muted-foreground"}`} />
-                  <span className={`text-sm font-semibold ${isActive ? "" : "text-foreground/80"}`}>
-                    {opt.label}
-                  </span>
-                </div>
-                <p className="text-[11px] text-muted-foreground leading-snug mb-2">
-                  {opt.description}
-                </p>
-                <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
-                  <span className="inline-flex items-center gap-1">
-                    <Film className="h-2.5 w-2.5" />
-                    {opt.frames} frames
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <Clock className="h-2.5 w-2.5" />
-                    {opt.eta}
-                  </span>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Audio mode hint */}
-        {includeAudio && (
-          <motion.p
-            className="mt-3 text-xs text-amber-400/80 flex items-center gap-1.5"
-            initial={{ opacity: 0, y: -5 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
-            <Volume2 className="h-3 w-3" />
-            Audio will be extracted from the video and transcribed with Whisper-large-v3.
-            The answer will combine both visual and audio analysis.
-          </motion.p>
-        )}
       </motion.div>
 
       <div className="grid lg:grid-cols-5 gap-6">
-        {/* Left: Video Upload */}
+        {/* Left: Audio Upload */}
         <div className="lg:col-span-2">
           <motion.div
             className="glass-card rounded-2xl overflow-hidden"
@@ -424,12 +320,12 @@ const VideoQA = () => {
             <div className="p-4 border-b border-white/[0.06]">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-semibold text-foreground flex items-center gap-2">
-                  <Film className="h-4 w-4 text-cyan-400" />
-                  Video
+                  <Music className="h-4 w-4 text-amber-400" />
+                  Audio
                 </span>
-                {videoFile && (
+                {audioFile && (
                   <button
-                    onClick={clearVideo}
+                    onClick={clearAudio}
                     className="rounded-lg p-1.5 text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-all"
                   >
                     <X className="h-4 w-4" />
@@ -439,19 +335,24 @@ const VideoQA = () => {
             </div>
 
             <div className="p-4">
-              {videoPreview ? (
+              {audioPreview ? (
                 <div className="space-y-3">
-                  <video
-                    ref={videoRef}
-                    src={videoPreview}
-                    controls
-                    className="w-full rounded-xl border border-white/[0.06] max-h-[280px] object-contain bg-black/50"
-                  />
+                  <div className="glass-panel rounded-xl p-4 flex flex-col items-center gap-3">
+                    <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-500/20 to-pink-500/20">
+                      <Music className="h-8 w-8 text-amber-400" />
+                    </div>
+                    <audio
+                      src={audioPreview}
+                      controls
+                      className="w-full"
+                      style={{ maxHeight: "40px" }}
+                    />
+                  </div>
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <Film className="h-3 w-3" />
-                    <span className="truncate">{videoFile?.name}</span>
+                    <Music className="h-3 w-3" />
+                    <span className="truncate">{audioFile?.name}</span>
                     <span className="shrink-0">
-                      ({(videoFile!.size / (1024 * 1024)).toFixed(1)} MB)
+                      ({(audioFile!.size / (1024 * 1024)).toFixed(1)} MB)
                     </span>
                   </div>
                 </div>
@@ -462,15 +363,15 @@ const VideoQA = () => {
                   onDragOver={(e) => e.preventDefault()}
                   onClick={() => fileInputRef.current?.click()}
                 >
-                  <div className="flex flex-col items-center justify-center py-12 px-4 rounded-xl border-2 border-dashed border-white/10 hover:border-cyan-500/40 transition-all duration-300 group-hover:bg-white/[0.02]">
-                    <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl glass-panel group-hover:shadow-glow-cyan transition-shadow animate-float">
-                      <Upload className="h-8 w-8 text-cyan-400/40 group-hover:text-cyan-400/80 transition-colors" />
+                  <div className="flex flex-col items-center justify-center py-12 px-4 rounded-xl border-2 border-dashed border-white/10 hover:border-amber-500/40 transition-all duration-300 group-hover:bg-white/[0.02]">
+                    <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl glass-panel group-hover:shadow-lg transition-shadow animate-float">
+                      <Mic className="h-8 w-8 text-amber-400/40 group-hover:text-amber-400/80 transition-colors" />
                     </div>
                     <p className="text-sm font-medium text-foreground/80 mb-1">
-                      Drop video here or click to browse
+                      Drop audio here or click to browse
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      MP4, WebM, MOV, AVI — up to 100 MB
+                      MP3, WAV, OGG, FLAC, M4A — up to 50 MB
                     </p>
                   </div>
                 </div>
@@ -478,8 +379,8 @@ const VideoQA = () => {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="video/*"
-                onChange={handleVideoSelect}
+                accept="audio/*,.mp3,.wav,.ogg,.flac,.m4a,.aac"
+                onChange={handleAudioSelect}
                 className="hidden"
               />
             </div>
@@ -497,7 +398,7 @@ const VideoQA = () => {
             <div className="p-4 border-b border-white/[0.06]">
               <span className="text-sm font-semibold text-foreground flex items-center gap-2">
                 <Sparkles className="h-4 w-4 text-violet-400" />
-                Ask About the Video
+                Ask About the Audio
               </span>
             </div>
 
@@ -506,12 +407,12 @@ const VideoQA = () => {
               {chatHistory.length === 0 && !isQuerying && (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
                   <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl glass-panel">
-                    <Sparkles className="h-8 w-8 text-violet-400/30" />
+                    <Mic className="h-8 w-8 text-amber-400/30" />
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    {videoFile
-                      ? "Video loaded! Ask your first question below."
-                      : "Upload a video first, then ask questions about it."}
+                    {audioFile
+                      ? 'Audio loaded! Try asking "Summarize this audio" or any question.'
+                      : "Upload an audio file first, then ask questions about it."}
                   </p>
                 </div>
               )}
@@ -523,18 +424,15 @@ const VideoQA = () => {
                   animate={{ opacity: 1, y: 0 }}
                 >
                   <div className="flex items-center gap-3">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-500/20 to-violet-500/20">
-                      <Loader2 className="h-4 w-4 text-cyan-400 animate-spin" />
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-amber-500/20 to-pink-500/20">
+                      <Loader2 className="h-4 w-4 text-amber-400 animate-spin" />
                     </div>
                     <div>
                       <p className="text-sm text-foreground font-medium">
-                        Analyzing{includeAudio ? " video + audio" : " video"} ({currentQuality.label})...
+                        Transcribing & analyzing audio...
                       </p>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        {quality === "fast" && "Extracting 16 frames"}
-                        {quality === "balanced" && "Detecting scene changes across 32 keyframes"}
-                        {quality === "thorough" && "Processing video in multiple segments"}
-                        {includeAudio && " + transcribing audio with Whisper"}
+                        Whisper is converting speech to text, then AI answers your question
                       </p>
                     </div>
                   </div>
@@ -542,7 +440,7 @@ const VideoQA = () => {
                     {[0, 1, 2].map((i) => (
                       <motion.div
                         key={i}
-                        className="h-1.5 w-1.5 rounded-full bg-cyan-400"
+                        className="h-1.5 w-1.5 rounded-full bg-amber-400"
                         animate={{ opacity: [0.3, 1, 0.3] }}
                         transition={{
                           duration: 1.2,
@@ -566,13 +464,8 @@ const VideoQA = () => {
                   >
                     {/* User Query */}
                     <div className="flex justify-end">
-                      <div className="max-w-[80%] rounded-2xl rounded-br-md bg-gradient-to-br from-cyan-500/20 to-violet-500/20 border border-cyan-500/10 px-4 py-2.5">
+                      <div className="max-w-[80%] rounded-2xl rounded-br-md bg-gradient-to-br from-amber-500/20 to-pink-500/20 border border-amber-500/10 px-4 py-2.5">
                         <p className="text-sm text-foreground">{entry.query}</p>
-                        {entry.result.include_audio && (
-                          <p className="text-[10px] text-amber-400/70 mt-1 flex items-center gap-1">
-                            <Volume2 className="h-2.5 w-2.5" /> Audio included
-                          </p>
-                        )}
                       </div>
                     </div>
 
@@ -583,8 +476,8 @@ const VideoQA = () => {
                           {entry.result.answer}
                         </p>
 
-                        {/* Audio transcript expandable */}
-                        {entry.result.audio_transcript && (
+                        {/* Transcript expandable */}
+                        {entry.result.transcript && (
                           <div className="border-t border-white/[0.06] pt-2">
                             <button
                               onClick={() =>
@@ -596,8 +489,8 @@ const VideoQA = () => {
                             >
                               <FileText className="h-3 w-3" />
                               {expandedTranscript === entry.id
-                                ? "Hide transcript"
-                                : "Show audio transcript"}
+                                ? "Hide full transcript"
+                                : "Show full transcript"}
                             </button>
                             <AnimatePresence>
                               {expandedTranscript === entry.id && (
@@ -605,10 +498,10 @@ const VideoQA = () => {
                                   initial={{ opacity: 0, height: 0 }}
                                   animate={{ opacity: 1, height: "auto" }}
                                   exit={{ opacity: 0, height: 0 }}
-                                  className="mt-2 rounded-lg bg-white/[0.03] border border-white/[0.06] p-3 max-h-40 overflow-y-auto"
+                                  className="mt-2 rounded-lg bg-white/[0.03] border border-white/[0.06] p-3 max-h-48 overflow-y-auto"
                                 >
                                   <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap">
-                                    {entry.result.audio_transcript}
+                                    {entry.result.transcript}
                                   </p>
                                 </motion.div>
                               )}
@@ -623,31 +516,14 @@ const VideoQA = () => {
                             {entry.result.response_time}s
                           </span>
                           <span className="inline-flex items-center gap-1">
-                            <Film className="h-3 w-3" />
-                            {entry.result.frames_extracted} frames
-                          </span>
-                          <span className="inline-flex items-center gap-1">
                             <Cpu className="h-3 w-3" />
                             {entry.result.model}
                           </span>
-                          <span className="inline-flex items-center gap-1">
-                            <Gauge className="h-3 w-3" />
-                            {entry.result.quality}
-                          </span>
-                          {entry.result.include_audio && (
+                          {entry.result.audio_duration > 0 && (
                             <span className="inline-flex items-center gap-1 text-amber-400/70">
                               <Volume2 className="h-3 w-3" />
-                              audio
-                              {entry.result.audio_duration
-                                ? ` (${entry.result.audio_duration}s)`
-                                : ""}
+                              {formatDuration(entry.result.audio_duration)}
                             </span>
-                          )}
-                          {entry.result.video_duration && (
-                            <span>{entry.result.video_duration}s video</span>
-                          )}
-                          {entry.result.video_resolution && (
-                            <span>{entry.result.video_resolution}</span>
                           )}
                         </div>
                       </div>
@@ -666,17 +542,17 @@ const VideoQA = () => {
                   onChange={(e) => setQuery(e.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder={
-                    videoFile
-                      ? "Ask a question about the video..."
-                      : "Upload a video first..."
+                    audioFile
+                      ? 'Ask about the audio (e.g. "Summarize this recording")'
+                      : "Upload an audio file first..."
                   }
-                  disabled={!videoFile || isQuerying}
+                  disabled={!audioFile || isQuerying}
                   className="flex-1 rounded-xl glass-input px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed"
                 />
                 <button
                   onClick={handleQuery}
-                  disabled={!videoFile || !query.trim() || isQuerying || !ngrokUrl}
-                  className="btn-gradient rounded-xl px-5 py-3 text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none flex items-center gap-2"
+                  disabled={!audioFile || !query.trim() || isQuerying || !ngrokUrl}
+                  className="bg-gradient-to-r from-amber-500 to-pink-500 hover:from-amber-600 hover:to-pink-600 text-white rounded-xl px-5 py-3 text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none flex items-center gap-2 transition-all shadow-lg shadow-amber-500/20"
                 >
                   {isQuerying ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -693,4 +569,4 @@ const VideoQA = () => {
   );
 };
 
-export default VideoQA;
+export default AudioQA;

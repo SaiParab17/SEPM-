@@ -140,17 +140,21 @@ export async function clearAllDocuments(): Promise<DeleteResponse> {
 }
 
 /**
- * Video QA — query a video via the Kaggle LLaVA endpoint
+ * Video QA — query a video via the Kaggle/Colab LLaVA + Whisper endpoint
  */
 export type VideoQAQuality = 'fast' | 'balanced' | 'thorough';
 
 export interface VideoQAResponse {
   success: boolean;
   answer?: string;
+  video_answer?: string;
+  audio_transcript?: string;
   frames_extracted?: number;
   response_time?: number;
   model?: string;
   quality?: string;
+  include_audio?: boolean;
+  audio_duration?: number;
   video_duration?: number;
   video_resolution?: string;
   error?: string;
@@ -160,12 +164,14 @@ export async function queryVideo(
   ngrokUrl: string,
   videoFile: File,
   query: string,
-  quality: VideoQAQuality = 'balanced'
+  quality: VideoQAQuality = 'balanced',
+  includeAudio: boolean = false
 ): Promise<VideoQAResponse> {
   const formData = new FormData();
   formData.append('video', videoFile);
   formData.append('query', query);
   formData.append('quality', quality);
+  formData.append('include_audio', includeAudio ? 'true' : 'false');
 
   const response = await fetch(`${ngrokUrl}/api/video-qa`, {
     method: 'POST',
@@ -177,6 +183,44 @@ export async function queryVideo(
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: 'Video query failed' }));
+    throw new Error(error.error || `Request failed (${response.status})`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Audio QA — standalone audio file Q&A via Whisper + LLaVA text
+ */
+export interface AudioQAResponse {
+  success: boolean;
+  answer?: string;
+  transcript?: string;
+  audio_duration?: number;
+  response_time?: number;
+  model?: string;
+  error?: string;
+}
+
+export async function queryAudio(
+  ngrokUrl: string,
+  audioFile: File,
+  query: string
+): Promise<AudioQAResponse> {
+  const formData = new FormData();
+  formData.append('audio', audioFile);
+  formData.append('query', query);
+
+  const response = await fetch(`${ngrokUrl}/api/audio-qa`, {
+    method: 'POST',
+    body: formData,
+    headers: {
+      'ngrok-skip-browser-warning': 'true',
+    },
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Audio query failed' }));
     throw new Error(error.error || `Request failed (${response.status})`);
   }
 
