@@ -5,9 +5,26 @@ import apiRoutes from './routes/api.routes.js';
 
 const app = express();
 
+const allowedOriginPatterns = [/^http:\/\/(localhost|127\.0\.0\.1):\d+$/i];
+
 // Middleware
 app.use(cors({
-  origin: env.frontendUrl,
+  origin: (origin, callback) => {
+    // Allow non-browser clients (curl, server-to-server) with no Origin header.
+    if (!origin) {
+      return callback(null, true);
+    }
+
+    if (origin === env.frontendUrl) {
+      return callback(null, true);
+    }
+
+    if (env.nodeEnv === 'development' && allowedOriginPatterns.some((pattern) => pattern.test(origin))) {
+      return callback(null, true);
+    }
+
+    return callback(new Error(`CORS blocked origin: ${origin}`));
+  },
   credentials: true,
 }));
 

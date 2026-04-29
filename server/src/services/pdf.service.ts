@@ -69,6 +69,7 @@ export class PDFService {
         const canvasContext = canvas.getContext('2d');
 
         await page.render({
+          canvas: canvas as any,
           canvasContext: canvasContext as any,
           viewport,
         }).promise;

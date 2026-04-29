@@ -36,11 +36,11 @@ export class LLMService {
       // Build context from retrieved documents
       const contextText = context
         .map((source, index) => {
-          const compact = source.content
+          const compact = (source.content ?? '')
             .replace(/\s+/g, ' ')
             .trim()
             .slice(0, this.contextSnippetChars);
-          return `[Document ${index + 1}: ${source.filename}, Page ${source.page}]\n${compact}`;
+          return compact;
         })
         .join('\n\n---\n\n');
 
@@ -102,7 +102,7 @@ export class LLMService {
 
     const snippets = top
       .map((source, i) => {
-        const text = source.content
+        const text = (source.content ?? '')
           .replace(/\s+/g, ' ')
           .trim()
           .slice(0, 220);
@@ -157,12 +157,11 @@ Your task:
 1. Read the context from the documents carefully
 2. Answer the user's question accurately based ONLY on the information in the context
 3. If the context doesn't contain enough information to answer the question, say so clearly
-4. Cite specific documents and page numbers when possible
-5. Be concise but comprehensive
-6. Respond in natural, human-friendly prose
-7. Return plain text only (no JSON, no escaped characters, no surrounding quotes)
-8. Do not use markdown formatting symbols like **, __, #, or backticks
-9. Prefer short, clear paragraphs over bullet-heavy output unless explicitly asked for bullets
+4. Be concise but comprehensive
+5. Respond in natural, human-friendly prose
+6. Return plain text only (no JSON, no escaped characters, no surrounding quotes)
+7. Do not use markdown formatting symbols like **, __, #, or backticks
+8. Prefer short, clear paragraphs over bullet-heavy output unless explicitly asked for bullets
 
 Context from documents:
 ${context}
